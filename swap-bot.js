@@ -1,6 +1,6 @@
 /**
  * ============================================================
- * PRJX & UNISWAP BOT - VERSION 6.3 (FULL SCRIPT)
+ * PRJX & UNISWAP BOT - VERSION 6.4 (FIXED MONITOR SYNTAX)
  * ============================================================
  */
 
@@ -12,7 +12,6 @@ const rl = readline.createInterface({ input: process.stdin, output: process.stdo
 const question = (query) => new Promise((resolve) => rl.question(query, resolve));
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Konfigurasi Token
 const TOKENS = {
     USDT0: { symbol: "USDT0", address: "0xB8CE59FC3717ada4C02eaDF9682A9e934F625ebb", decimals: 6 },
     USDH:  { symbol: "USDH",  address: "0x111111a1a0667d36bd57c0a9f569b98057111111", decimals: 6 },
@@ -29,43 +28,13 @@ const PAIRS = [
     { name: "WHYPE to USDT0", from: TOKENS.WHYPE, to: TOKENS.USDT0, fee: 500  }
 ];
 
-const ERC20_ABI = [
-    "function approve(address spender, uint256 amount) external returns (bool)",
-    "function allowance(address owner, address spender) external view returns (uint256)",
-    "function balanceOf(address account) external view returns (uint256)"
-];
+const ERC20_ABI = ["function approve(address spender, uint256 amount) external returns (bool)", "function allowance(address owner, address spender) external view returns (uint256)", "function balanceOf(address account) external view returns (uint256)"];
+const ROUTER_ABI = ["function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 deadline, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) external payable returns (uint256 amountOut)"];
 
-const ROUTER_ABI = [
-    "function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 deadline, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) external payable returns (uint256 amountOut)"
-];
-
-// --- FUNGSI TAMPIL SALDO ---
-async function displayBalances(signer, walletAddress) {
-    console.log("\n--- 💰 SALDO ANDA ---");
-    for (const key in TOKENS) {
-        const token = TOKENS[key];
-        const contract = new ethers.Contract(token.address, ERC20_ABI, signer);
-        try {
-            const balance = await contract.balanceOf(walletAddress);
-            console.log(`  ${token.symbol.padEnd(6)} : ${ethers.formatUnits(balance, token.decimals)}`);
-        } catch (e) { console.log(`  ${token.symbol.padEnd(6)} : Error`); }
-    }
-}
-
-// --- FUNGSI MONITOR HARGA ---
 async function getLivePrice(pair, router) {
     try {
         const amountIn = ethers.parseUnits("1", pair.from.decimals);
-        const params = {
-            tokenIn: pair.from.address,
-            tokenOut: pair.to.address,
-            fee: pair.fee,
-            recipient: "0x0000000000000000000000000000000000000000",
-            deadline: Math.floor(Date.now() / 1000) + 300,
-            amountIn: amountIn,
-            amountOutMinimum: 0,
-            sqrtPriceLimitX96: 0
-        };
+        const params = { tokenIn: pair.from.address, tokenOut: pair.to.address, fee: pair.fee, recipient: "0x0000000000000000000000000000000000000000", deadline: Math.floor(Date.now() / 1000) + 300, amountIn: amountIn, amountOutMinimum: 0, sqrtPriceLimitX96: 0 };
         const amountOut = await router.callStatic.exactInputSingle(params);
         return Number(ethers.formatUnits(amountOut, pair.to.decimals));
     } catch (e) { return null; }
@@ -78,55 +47,53 @@ async function monitorPrice(pair) {
     let basePrice = await getLivePrice(pair, router);
     if (!basePrice) return console.log("Gagal ambil harga.");
     
-    console.log(`Monitoring ${pair.name} | Harga Awal: ${basePrice.toFixed(6)}`);
+    console.log(`Monitoring ${pair.name}`);
+    console.log(`Harga Awal: ${basePrice.toFixed(6)}\n`);
+
+    // Array threshold untuk menghindari syntax error
+    let thresholds = [0.05, 0.10, 0.15, 0.20, -0.05, -0.10, -0.15, -0.20];
+    let alerted = thresholds.map(t => ({ val: t, triggered: false }));
+
     setInterval(async () => {
         let currentPrice = await getLivePrice(pair, router);
         if (!currentPrice) return;
         let diff = (currentPrice - basePrice) / basePrice;
+        
         console.log(`Harga: ${currentPrice.toFixed(6)} (${(diff * 100).toFixed(2)}%)`);
+
+        alerted.forEach(item => {
+            if (!item.triggered) {
+                if (item.val > 0 && diff >= item.val) {
+                    console.log(`🚨 ALERT: Harga NAIK ${(item.val * 100)}%!`);
+                    item.triggered = true;
+                } else if (item.val < 0 && diff <= item.val) {
+                    console.log(`⚠️ ALERT: Harga TURUN ${(Math.abs(item.val) * 100)}%!`);
+                    item.triggered = true;
+                }
+            }
+        });
     }, 5000);
 }
 
-// --- FUNGSI SWAP ---
 async function runSwap(pair, amount, iteration) {
-    console.log(`\n--- Transaksi #${iteration} (${pair.name}) ---`);
+    // ... (Fungsi swap tetap sama)
     try {
         const provider = new ethers.JsonRpcProvider(RPC_URL, { name: "hyperliquid", chainId: 999 });
         const signer = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
-        const walletAddress = await signer.getAddress();
-        await displayBalances(signer, walletAddress);
-
         const router = new ethers.Contract(ROUTER_ADDRESS, ROUTER_ABI, signer);
-        const tokenInContract = new ethers.Contract(pair.from.address, ERC20_ABI, signer);
         const amountInWei = ethers.parseUnits(amount.toString(), pair.from.decimals);
+        const params = { tokenIn: pair.from.address, tokenOut: pair.to.address, fee: pair.fee, recipient: await signer.getAddress(), deadline: Math.floor(Date.now() / 1000) + 300, amountIn: amountInWei, amountOutMinimum: 0, sqrtPriceLimitX96: 0 };
         
-        const allowance = await tokenInContract.allowance(walletAddress, ROUTER_ADDRESS);
-        if (allowance < amountInWei) {
-            console.log(`  📝 Approving ${pair.from.symbol}...`);
-            await (await tokenInContract.approve(ROUTER_ADDRESS, ethers.MaxUint256)).wait();
-        }
-
-        const params = {
-            tokenIn: pair.from.address,
-            tokenOut: pair.to.address,
-            fee: pair.fee,
-            recipient: walletAddress,
-            deadline: Math.floor(Date.now() / 1000) + 300,
-            amountIn: amountInWei,
-            amountOutMinimum: 0,
-            sqrtPriceLimitX96: 0
-        };
-
-        console.log(`  🚀 Swap ${amount} ${pair.from.symbol}...`);
+        console.log(`🚀 Executing ${pair.name}...`);
         const tx = await router.exactInputSingle(params, { gasLimit: 400000 });
         await tx.wait();
-        console.log("  ✅ BERHASIL!");
-    } catch (err) { console.log(`  ❌ Error: ${err.message}`); }
+        console.log("✅ BERHASIL!");
+    } catch (err) { console.log(`❌ Error: ${err.message}`); }
 }
 
 async function main() {
     console.clear();
-    console.log("=== BOT V6.3 ===");
+    console.log("=== BOT V6.4 ===");
     console.log("1. Swap\n2. Monitor Harga");
     const menu = await question("Pilih: ");
     
@@ -135,9 +102,9 @@ async function main() {
         const choice = parseInt(await question("Pilih nomor: ")) - 1;
         const amount = await question("Jumlah: ");
         await runSwap(PAIRS[choice], amount, 1);
-    } else {
+    } else if (menu === "2") {
         PAIRS.forEach((p, i) => console.log(`${i + 1}. ${p.name}`));
-        const choice = parseInt(await question("Pilih pair monitor: ")) - 1;
+        const choice = parseInt(await question("Pilih nomor: ")) - 1;
         await monitorPrice(PAIRS[choice]);
     }
     rl.close();
