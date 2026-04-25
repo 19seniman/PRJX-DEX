@@ -1,6 +1,6 @@
 /**
  * ============================================================
- * PRJX & UNISWAP BOT - VERSION 6.4 (FIXED MONITOR SYNTAX)
+ * PRJX & UNISWAP BOT - VERSION 6.5 (CLEAN INSTALL)
  * ============================================================
  */
 
@@ -10,8 +10,8 @@ const readline = require("readline");
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 const question = (query) => new Promise((resolve) => rl.question(query, resolve));
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Konfigurasi Token
 const TOKENS = {
     USDT0: { symbol: "USDT0", address: "0xB8CE59FC3717ada4C02eaDF9682A9e934F625ebb", decimals: 6 },
     USDH:  { symbol: "USDH",  address: "0x111111a1a0667d36bd57c0a9f569b98057111111", decimals: 6 },
@@ -50,9 +50,9 @@ async function monitorPrice(pair) {
     console.log(`Monitoring ${pair.name}`);
     console.log(`Harga Awal: ${basePrice.toFixed(6)}\n`);
 
-    // Array threshold untuk menghindari syntax error
-    let thresholds = [0.05, 0.10, 0.15, 0.20, -0.05, -0.10, -0.15, -0.20];
-    let alerted = thresholds.map(t => ({ val: t, triggered: false }));
+    // Menggunakan ARRAY agar aman dari Syntax Error
+    const targets = [0.05, 0.10, 0.15, 0.20, -0.05, -0.10, -0.15, -0.20];
+    let triggered = new Array(targets.length).fill(false);
 
     setInterval(async () => {
         let currentPrice = await getLivePrice(pair, router);
@@ -61,30 +61,30 @@ async function monitorPrice(pair) {
         
         console.log(`Harga: ${currentPrice.toFixed(6)} (${(diff * 100).toFixed(2)}%)`);
 
-        alerted.forEach(item => {
-            if (!item.triggered) {
-                if (item.val > 0 && diff >= item.val) {
-                    console.log(`🚨 ALERT: Harga NAIK ${(item.val * 100)}%!`);
-                    item.triggered = true;
-                } else if (item.val < 0 && diff <= item.val) {
-                    console.log(`⚠️ ALERT: Harga TURUN ${(Math.abs(item.val) * 100)}%!`);
-                    item.triggered = true;
+        for (let i = 0; i < targets.length; i++) {
+            if (!triggered[i]) {
+                if (targets[i] > 0 && diff >= targets[i]) {
+                    console.log(`🚨 ALERT: Harga NAIK ${(targets[i] * 100)}%!`);
+                    triggered[i] = true;
+                } else if (targets[i] < 0 && diff <= targets[i]) {
+                    console.log(`⚠️ ALERT: Harga TURUN ${(Math.abs(targets[i]) * 100)}%!`);
+                    triggered[i] = true;
                 }
             }
-        });
+        }
     }, 5000);
 }
 
-async function runSwap(pair, amount, iteration) {
-    // ... (Fungsi swap tetap sama)
+async function runSwap(pair, amount) {
     try {
         const provider = new ethers.JsonRpcProvider(RPC_URL, { name: "hyperliquid", chainId: 999 });
         const signer = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
         const router = new ethers.Contract(ROUTER_ADDRESS, ROUTER_ABI, signer);
         const amountInWei = ethers.parseUnits(amount.toString(), pair.from.decimals);
+        
         const params = { tokenIn: pair.from.address, tokenOut: pair.to.address, fee: pair.fee, recipient: await signer.getAddress(), deadline: Math.floor(Date.now() / 1000) + 300, amountIn: amountInWei, amountOutMinimum: 0, sqrtPriceLimitX96: 0 };
         
-        console.log(`🚀 Executing ${pair.name}...`);
+        console.log(`🚀 Swap ${amount} ${pair.from.symbol}...`);
         const tx = await router.exactInputSingle(params, { gasLimit: 400000 });
         await tx.wait();
         console.log("✅ BERHASIL!");
@@ -93,7 +93,7 @@ async function runSwap(pair, amount, iteration) {
 
 async function main() {
     console.clear();
-    console.log("=== BOT V6.4 ===");
+    console.log("=== BOT V6.5 ===");
     console.log("1. Swap\n2. Monitor Harga");
     const menu = await question("Pilih: ");
     
@@ -101,7 +101,7 @@ async function main() {
         PAIRS.forEach((p, i) => console.log(`${i + 1}. ${p.name}`));
         const choice = parseInt(await question("Pilih nomor: ")) - 1;
         const amount = await question("Jumlah: ");
-        await runSwap(PAIRS[choice], amount, 1);
+        await runSwap(PAIRS[choice], amount);
     } else if (menu === "2") {
         PAIRS.forEach((p, i) => console.log(`${i + 1}. ${p.name}`));
         const choice = parseInt(await question("Pilih nomor: ")) - 1;
