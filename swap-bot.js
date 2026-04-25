@@ -1,6 +1,6 @@
 /**
  * ============================================================
- * PRJX & UNISWAP BOT - VERSION 5.0 (THE STABLE ONE)
+ * PRJX & UNISWAP BOT - VERSION 5.0 (SINGLE CHAIN - HYPEREVM)
  * ============================================================
  */
 
@@ -13,8 +13,7 @@ const question = (query) => new Promise((resolve) => rl.question(query, resolve)
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 const NETWORKS = {
-    hyperevm: { name: "HyperEVM", rpc: "https://rpc.hyperliquid.xyz/evm", chainId: 999 },
-    base: { name: "Base", rpc: "https://mainnet.base.org", chainId: 8453 }
+    hyperevm: { name: "HyperEVM", rpc: "https://rpc.hyperliquid.xyz/evm", chainId: 999 }
 };
 
 const CONTRACTS = {
@@ -23,12 +22,6 @@ const CONTRACTS = {
         out: "0x111111a1a0667d36bd57c0a9f569b98057111111", // USDH
         router: "0x1EbDFC75FfE3ba3de61E7138a3E8706aC841Af9B",
         fee: 100
-    },
-    base: {
-        in: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", // USDT
-        out: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // USDC
-        router: "0x2626664c2603336E57B271c5C0b26F421741e481", // SwapRouter02
-        fee: 100 
     }
 };
 
@@ -38,7 +31,6 @@ const ERC20_ABI = [
     "function decimals() external view returns (uint8)"
 ];
 
-// Gunakan ABI paling standar untuk Uniswap V3 Router
 const ROUTER_ABI = [
     "function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 deadline, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) external payable returns (uint256 amountOut)"
 ];
@@ -46,7 +38,8 @@ const ROUTER_ABI = [
 async function runSwap(networkKey, iteration) {
     const netConfig = NETWORKS[networkKey];
     const poolConfig = CONTRACTS[networkKey];
-    const amountStr = networkKey === "hyperevm" ? process.env.AMOUNT_USDT0 : process.env.AMOUNT_USDT_BASE;
+    // Menggunakan variabel environment khusus HyperEVM
+    const amountStr = process.env.AMOUNT_USDT0;
 
     console.log(`\n[${netConfig.name} - Transaksi #${iteration}]`);
 
@@ -60,7 +53,7 @@ async function runSwap(networkKey, iteration) {
 
         const decimals = await tokenIn.decimals();
         const amountInWei = ethers.parseUnits(amountStr || "0.01", decimals);
-        const amountOutMinWei = (amountInWei * BigInt(98)) / BigInt(100); // Slippage 2% (Lebih aman)
+        const amountOutMinWei = (amountInWei * BigInt(98)) / BigInt(100); // Slippage 2%
 
         // 1. Approval Check
         const allowance = await tokenIn.allowance(walletAddress, poolConfig.router);
@@ -77,7 +70,7 @@ async function runSwap(networkKey, iteration) {
             tokenOut: poolConfig.out,
             fee: poolConfig.fee,
             recipient: walletAddress,
-            deadline: Math.floor(Date.now() / 1000) + 60 * 20, // 20 Menit
+            deadline: Math.floor(Date.now() / 1000) + 60 * 20,
             amountIn: amountInWei,
             amountOutMinimum: amountOutMinWei,
             sqrtPriceLimitX96: 0
@@ -85,8 +78,7 @@ async function runSwap(networkKey, iteration) {
 
         console.log(`  🚀 Menjalankan Swap...`);
 
-        // 3. Eksekusi dengan Gas Limit Manual & Penanganan Encoding
-        // Kita gunakan .getFunction untuk memastikan kita memanggil fungsi yang benar
+        // 3. Eksekusi
         const swapFunc = router.getFunction("exactInputSingle");
         const tx = await swapFunc(params, {
             gasLimit: 300000 
@@ -104,7 +96,7 @@ async function runSwap(networkKey, iteration) {
     } catch (err) {
         console.log(`  ❌ Error: ${err.reason || err.message}`);
         if (err.message.includes("insufficient funds")) {
-            console.log("     Pesan: Saldo ETH/HYPE Anda tidak cukup untuk gas fee.");
+            console.log("      Pesan: Saldo native token Anda tidak cukup untuk gas fee.");
         }
     }
 }
@@ -112,22 +104,18 @@ async function runSwap(networkKey, iteration) {
 async function main() {
     console.clear();
     console.log("==========================================");
-    console.log("    🤖 BOT SWAP MULTI-CHAIN V5.0          ");
+    console.log("    🤖 BOT SWAP HYPEREVM ONLY V5.0        ");
     console.log("==========================================");
 
-    if (!process.env.PRIVATE_KEY) return console.log("PRIVATE_KEY tidak ditemukan!");
+    if (!process.env.PRIVATE_KEY) return console.log("PRIVATE_KEY tidak ditemukan di .env!");
 
-    console.log("1. HyperEVM (USDT0 -> USDH)");
-    console.log("2. Base (USDT -> USDC)");
-    console.log("3. Jalankan Keduanya");
+    console.log("Jaringan: HyperEVM (USDT0 -> USDH)");
     
-    const choice = await question("\nPilih Jaringan (1-3): ");
-    const count = parseInt(await question("Berapa kali transaksi? ")) || 1;
+    const count = parseInt(await question("\nBerapa kali transaksi? ")) || 1;
     const delay = parseInt(await question("Jeda antar transaksi (detik)? ")) || 5;
 
     for (let i = 1; i <= count; i++) {
-        if (choice === "1" || choice === "3") await runSwap("hyperevm", i);
-        if (choice === "2" || choice === "3") await runSwap("base", i);
+        await runSwap("hyperevm", i);
         
         if (i < count) {
             console.log(`\n😴 Menunggu ${delay} detik...`);
