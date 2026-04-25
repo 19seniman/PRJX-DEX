@@ -1,9 +1,6 @@
-# 🤖 PRJX + Uniswap Swap Bot
+# 🤖 PRJX DEX
 
-Script Node.js untuk swap token di dua jaringan berbeda:
-1. **USDT0 → USDH** di HyperEVM via Project X (PRJX)
-2. **USDT → USDC** di Base via Uniswap V3
-
+Website:https://www.prjx.com/@LimMaushin
 ---
 
 ## ⚙️ Instalasi
@@ -57,13 +54,6 @@ node swap-bot.js all
 | PRJX Router | `0x1EbDFC75FfE3ba3de61E7138a3E8706aC841Af9B` ✅ |
 | RPC | `https://rpc.hyperliquid.xyz/evm` |
 
-### Base (Chain ID: 8453)
-| Token/Contract | Address |
-|---|---|
-| USDT (Stargate) | `0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2` |
-| USDC (Circle native) | `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913` |
-| Uniswap V3 Router | `0x2626664c2603336E57B271c5C0b26F421741e481` |
-| RPC | `https://mainnet.base.org` |
 
 ---
 
@@ -80,6 +70,4 @@ node swap-bot.js all
 ## 💡 Tips
 
 - **Gas HyperEVM**: butuh HYPE (beli di Hyperliquid, transfer ke EVM)
-- **Gas Base**: butuh ETH di Base network
-- **Slippage stablecoin**: 0.5% (50 bps) sudah aman untuk pair stablecoin
-- **Fee Uniswap USDT/USDC Base**: gunakan fee tier 100 (0.01%) untuk pool paling liquid
+
