@@ -29,17 +29,7 @@ cp .env.example .env
 ## 🚀 Cara Pakai
 
 ```bash
-# Cek saldo saja (AMAN, tidak ada transaksi)
-node swap-bot.js dryrun
-
-# Swap USDT0 → USDH di HyperEVM (Project X)
-node swap-bot.js swap1
-
-# Swap USDT → USDC di Base (Uniswap V3)
-node swap-bot.js swap2
-
-# Jalankan kedua swap sekaligus
-node swap-bot.js all
+node swap-bot.js 
 ```
 
 ---
