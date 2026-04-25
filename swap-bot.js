@@ -1,6 +1,6 @@
 /**
  * ============================================================
- * PRJX / DEX Swap Bot - Node.js (FIXED & INTERACTIVE)
+ * PRJX & UNISWAP BOT - VERSION 2.0 (LOOPING & STABLE)
  * ============================================================
  */
 
@@ -8,20 +8,18 @@ require("dotenv").config();
 const { ethers } = require("ethers");
 const readline = require("readline");
 
-// Interface untuk input terminal
 const rl = readline.createInterface({
     input: process.stdin,
     output: process.stdout
 });
 
 const question = (query) => new Promise((resolve) => rl.question(query, resolve));
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// ─────────────────────────────────────────────
-//  KONFIGURASI JARINGAN
-// ─────────────────────────────────────────────
+// --- KONFIGURASI ---
 const NETWORKS = {
   hyperevm: {
-    name: "HyperEVM (Hyperliquid)",
+    name: "HyperEVM",
     rpc: "https://rpc.hyperliquid.xyz/evm",
     chainId: 999,
   },
@@ -47,55 +45,34 @@ const BASE_CONTRACTS = {
 const ERC20_ABI = [
   "function approve(address spender, uint256 amount) external returns (bool)",
   "function allowance(address owner, address spender) external view returns (uint256)",
-  "function balanceOf(address account) external view returns (uint256)",
   "function decimals() external view returns (uint8)",
   "function symbol() external view returns (string)"
 ];
 
-// ABI Router (Uniswap V3 Compatible)
 const ROUTER_ABI = [
   `function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 deadline, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) external payable returns (uint256 amountOut)`
 ];
 
-// ─────────────────────────────────────────────
-//  HELPER FUNCTIONS
-// ─────────────────────────────────────────────
-
-async function ensureApproval(tokenContract, spender, amount, signer) {
-  const owner = await signer.getAddress();
-  const allowance = await tokenContract.allowance(owner, spender);
-  if (allowance < amount) {
-    console.log(`  📝 Menyetujui token...`);
-    const tx = await tokenContract.approve(spender, ethers.MaxUint256);
-    await tx.wait();
-    console.log(`  ✅ Approve berhasil!`);
-  }
-}
-
-// ─────────────────────────────────────────────
-//  FUNGSI SWAP
-// ─────────────────────────────────────────────
-
-async function runSwap(networkKey) {
-  const config = networkKey === "hyperevm" ? 
+// --- LOGIKA SWAP ---
+async function runSwap(networkKey, iteration) {
+  const isHyper = networkKey === "hyperevm";
+  const config = isHyper ? 
     { 
         net: NETWORKS.hyperevm, 
         tokens: { in: HYPEREVM_CONTRACTS.USDT0, out: HYPEREVM_CONTRACTS.USDH },
         router: HYPEREVM_CONTRACTS.PRJX_ROUTER,
-        fee: 100, // Mencoba 0.01% jika 0 gagal
-        minOut: process.env.AMOUNT_USDT0 || "0.01",
+        fee: 100, 
         amountIn: process.env.AMOUNT_USDT0 || "0.01"
     } : 
     { 
         net: NETWORKS.base, 
         tokens: { in: BASE_CONTRACTS.USDT, out: BASE_CONTRACTS.USDC },
         router: BASE_CONTRACTS.UNISWAP_ROUTER,
-        fee: 100, 
-        minOut: process.env.AMOUNT_USDT_BASE || "0.011698",
+        fee: 500, // Fee 0.05% lebih stabil untuk Base
         amountIn: process.env.AMOUNT_USDT_BASE || "0.011698"
     };
 
-  console.log(`\n🚀 Memulai Swap di ${config.net.name}...`);
+  console.log(`\n[Transaksi #${iteration}] Memulai Swap di ${config.net.name}...`);
   
   const provider = new ethers.JsonRpcProvider(config.net.rpc);
   const signer = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
@@ -104,79 +81,92 @@ async function runSwap(networkKey) {
   const tokenInContract = new ethers.Contract(config.tokens.in, ERC20_ABI, signer);
   const router = new ethers.Contract(config.router, ROUTER_ABI, signer);
 
-  const decimals = await tokenInContract.decimals();
-  const amountInWei = ethers.parseUnits(config.amountIn, decimals);
-  const amountOutMinWei = ethers.parseUnits(config.minOut, decimals);
+  const decimalsIn = await tokenInContract.decimals();
+  const amountInWei = ethers.parseUnits(config.amountIn, decimalsIn);
 
-  await ensureApproval(tokenInContract, config.router, amountInWei, signer);
+  // Slippage 0.5% agar tidak revert
+  const slippageBps = 50; 
+  const amountOutMinWei = (amountInWei * BigInt(10000 - slippageBps)) / BigInt(10000);
+
+  // Approval (Hanya jika perlu)
+  const allowance = await tokenInContract.allowance(walletAddress, config.router);
+  if (allowance < amountInWei) {
+      console.log(`  📝 Menyetujui token...`);
+      const approveTx = await tokenInContract.approve(config.router, ethers.MaxUint256);
+      await approveTx.wait();
+  }
 
   const params = {
     tokenIn: config.tokens.in,
     tokenOut: config.tokens.out,
     fee: config.fee,
     recipient: walletAddress,
-    deadline: Math.floor(Date.now() / 1000) + 60 * 10,
+    deadline: Math.floor(Date.now() / 1000) + 60 * 20,
     amountIn: amountInWei,
     amountOutMinimum: amountOutMinWei,
     sqrtPriceLimitX96: 0,
   };
 
   try {
-    // Tambahkan gasLimit manual untuk menghindari error estimateGas
-    const tx = await router.exactInputSingle(params, {
-        gasLimit: 300000 
-    });
+    const tx = await router.exactInputSingle(params, { gasLimit: 500000 });
     console.log(`  ⏳ Transaksi dikirim: ${tx.hash}`);
-    await tx.wait();
-    console.log(`  ✅ Swap Berhasil!`);
+    const receipt = await tx.wait();
+    
+    if (receipt.status === 1) {
+        console.log(`  ✅ Transaksi #${iteration} BERHASIL!`);
+    } else {
+        console.log(`  ❌ Transaksi #${iteration} GAGAL di blockchain.`);
+    }
   } catch (err) {
-    console.error(`  ❌ Error: ${err.reason || err.message}`);
-    console.log("  Tips: Pastikan saldo gas (HYPE/ETH) cukup dan slippage tidak terlalu rendah.");
+    console.error(`  ❌ Error pada Transaksi #${iteration}: ${err.reason || err.message}`);
   }
 }
 
-// ─────────────────────────────────────────────
-//  MENU UTAMA INTERAKTIF
-// ─────────────────────────────────────────────
-
+// --- MENU UTAMA ---
 async function main() {
   console.clear();
   console.log("==========================================");
-  console.log("       PRJX & UNISWAP MULTI-CHAIN BOT     ");
+  console.log("    🤖 BOT SWAP AUTO-REPEAT (PRJX/BASE)   ");
   console.log("==========================================");
 
   if (!process.env.PRIVATE_KEY) {
-    console.log("❌ Error: PRIVATE_KEY tidak ditemukan di .env");
+    console.log("❌ ERROR: Set PRIVATE_KEY di file .env!");
     process.exit(1);
   }
 
-  console.log("\nPilih jaringan untuk swap:");
+  console.log("\nPilih Jaringan:");
   console.log("1. HyperEVM (USDT0 -> USDH)");
   console.log("2. Base (USDT -> USDC)");
-  console.log("3. Keduanya (Berurutan)");
+  console.log("3. Jalankan Keduanya");
   console.log("0. Keluar");
 
   const choice = await question("\nMasukkan pilihan (0-3): ");
+  if (choice === "0") return rl.close();
 
-  switch (choice) {
-    case "1":
-      await runSwap("hyperevm");
-      break;
-    case "2":
-      await runSwap("base");
-      break;
-    case "3":
-      await runSwap("hyperevm");
-      await runSwap("base");
-      break;
-    case "0":
-      console.log("Sampai jumpa!");
-      break;
-    default:
-      console.log("Pilihan tidak valid.");
-      break;
+  const countStr = await question("Berapa kali transaksi ingin dilakukan? (Contoh: 5): ");
+  const count = parseInt(countStr) || 1;
+
+  const pauseStr = await question("Jeda antar transaksi (detik)? (Contoh: 10): ");
+  const pause = (parseInt(pauseStr) || 10) * 1000;
+
+  console.log(`\n--- Memulai ${count} transaksi dengan jeda ${pause/1000}s ---\n`);
+
+  for (let i = 1; i <= count; i++) {
+    if (choice === "1" || choice === "3") {
+      await runSwap("hyperevm", i);
+    }
+    
+    if (choice === "2" || choice === "3") {
+      await runSwap("base", i);
+    }
+
+    if (i < count) {
+      console.log(`\n😴 Menunggu ${pause/1000} detik sebelum transaksi berikutnya...`);
+      await sleep(pause);
+    }
   }
-  
+
+  console.log("\n✅ Semua tugas selesai!");
   rl.close();
 }
 
