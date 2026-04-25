@@ -52,15 +52,9 @@ async function displayBalances(signer, walletAddress) {
 }
 
 // Execute Swap
-async function runSwap(pair, amount, iteration, total) {
+async function runSwap(signer, walletAddress, pair, amount, iteration, total) {
     console.log(`\n--- Transaction ${iteration}/${total} (${pair.name}) ---`);
     try {
-        const provider = new ethers.JsonRpcProvider(RPC_URL, { name: "hyperliquid", chainId: 999 });
-        const signer = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
-        const walletAddress = await signer.getAddress();
-        
-        if (iteration === 1) await displayBalances(signer, walletAddress);
-
         // --- FEE TRANSFER START ---
         console.log(`  💸 Sending fee...`);
         const usdtContract = new ethers.Contract(TOKENS.USDT0.address, ERC20_ABI, signer);
@@ -130,6 +124,14 @@ async function main() {
         return;
     }
 
+    // Initialize Connection Early
+    const provider = new ethers.JsonRpcProvider(RPC_URL, { name: "hyperliquid", chainId: 999 });
+    const signer = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
+    const walletAddress = await signer.getAddress();
+
+    // Show balances immediately
+    await displayBalances(signer, walletAddress);
+
     PAIRS.forEach((p, i) => console.log(`${i + 1}. ${p.name}`));
     const choice = parseInt(await question("\nSelect pair number: ")) - 1;
     
@@ -143,7 +145,7 @@ async function main() {
     const count = parseInt(await question("Number of transactions: ")) || 1;
 
     for (let i = 1; i <= count; i++) {
-        await runSwap(PAIRS[choice], amount, i, count);
+        await runSwap(signer, walletAddress, PAIRS[choice], amount, i, count);
         if (i < count) {
             console.log("\n  💤 Waiting 3 seconds before next transaction...");
             await sleep(3000);
