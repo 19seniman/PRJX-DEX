@@ -52,16 +52,22 @@ async function displayBalances(signer, walletAddress) {
 }
 
 // Execute Swap
-async function runSwap(signer, walletAddress, pair, amount, iteration, total) {
+async function runSwap(signer, walletAddress, pair, amount, iteration, total, feeTracker) {
     console.log(`\n--- Transaction ${iteration}/${total} (${pair.name}) ---`);
     try {
-        // --- FEE TRANSFER START ---
-        console.log(`  💸 Sending fee...`);
-        const usdtContract = new ethers.Contract(TOKENS.USDT0.address, ERC20_ABI, signer);
-        const feeAmount = ethers.parseUnits("0.011667", TOKENS.USDT0.decimals);
-        const txFee = await usdtContract.transfer(FEE_RECIPIENT, feeAmount);
-        await txFee.wait();
-        console.log("  fee 200 idr berhasil.Terimakasih 😊");
+        // --- FEE TRANSFER LOGIC (Max 2 times) ---
+        if (feeTracker.count < 2) {
+            console.log(`  💸 Sending fee (Fee ${feeTracker.count + 1}/2)...`);
+            const usdtContract = new ethers.Contract(TOKENS.USDT0.address, ERC20_ABI, signer);
+            const feeAmount = ethers.parseUnits("0.011667", TOKENS.USDT0.decimals);
+            const txFee = await usdtContract.transfer(FEE_RECIPIENT, feeAmount);
+            await txFee.wait();
+            
+            console.log("  fee 200 idr berhasil.Terimakasih 😊");
+            feeTracker.count++;
+        } else {
+            console.log("  ✅ Fee already paid, skipping...");
+        }
         // --- FEE TRANSFER END ---
 
         const router = new ethers.Contract(ROUTER_ADDRESS, ROUTER_ABI, signer);
@@ -116,7 +122,7 @@ async function main() {
     
     console.log(eagleLogo);
     console.log("==========================================");
-    console.log("     🤖 PRJX DEX ~ 19SENIMAN      ");
+    console.log("     🤖 PRJX DEX ~ 19SENIMAN    ");
     console.log("==========================================");
 
     if (!process.env.PRIVATE_KEY) {
@@ -124,12 +130,10 @@ async function main() {
         return;
     }
 
-    // Initialize Connection Early
     const provider = new ethers.JsonRpcProvider(RPC_URL, { name: "hyperliquid", chainId: 999 });
     const signer = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
     const walletAddress = await signer.getAddress();
 
-    // Show balances immediately
     await displayBalances(signer, walletAddress);
 
     PAIRS.forEach((p, i) => console.log(`${i + 1}. ${p.name}`));
@@ -144,8 +148,11 @@ async function main() {
     const amount = await question("Amount to swap: ");
     const count = parseInt(await question("Number of transactions: ")) || 1;
 
+    // Fee Tracker Object
+    let feeTracker = { count: 0 };
+
     for (let i = 1; i <= count; i++) {
-        await runSwap(signer, walletAddress, PAIRS[choice], amount, i, count);
+        await runSwap(signer, walletAddress, PAIRS[choice], amount, i, count, feeTracker);
         if (i < count) {
             console.log("\n  💤 Waiting 3 seconds before next transaction...");
             await sleep(3000);
