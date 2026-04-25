@@ -9,6 +9,8 @@ Script Node.js untuk swap token di dua jaringan berbeda:
 ## ⚙️ Instalasi
 
 ```bash
+git clone https://github.com/19seniman/PRJX-DEX.git
+cd PRJX-DEX
 npm install ethers dotenv
 ```
 
