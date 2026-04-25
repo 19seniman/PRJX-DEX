@@ -1,6 +1,6 @@
 /**
  * ============================================================
- * PRJX & UNISWAP BOT - VERSION 5.4 (UPDATED WITH USDT0-USDH)
+ * PRJX & UNISWAP BOT - VERSION 5.5 (WRAPPED HYPE FIX)
  * ============================================================
  */
 
@@ -12,14 +12,15 @@ const rl = readline.createInterface({ input: process.stdin, output: process.stdo
 const question = (query) => new Promise((resolve) => rl.question(query, resolve));
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
+// Konfigurasi Token (HYPE sekarang adalah ERC-20, bukan native)
 const TOKENS = {
-    USDT0: { symbol: "USDT0", address: "0xB8CE59FC3717ada4C02eaDF9682A9e934F625ebb", decimals: 6 },
-    USDH:  { symbol: "USDH",  address: "0x111111a1a0667d36bd57c0a9f569b98057111111", decimals: 6 },
-    HYPE:  { symbol: "HYPE",  address: "0x2222222222222222222222222222222222222222", decimals: 18, isNative: true }, 
-    PURR:  { symbol: "PURR",  address: "0xC0021B0e504620025F17A9446D3283624E772297", decimals: 8 },
-    UBTC:  { symbol: "uBTC",  address: "0x059a45653655181741F8c01d4a046294D256191E", decimals: 8 },
-    UETH:  { symbol: "uETH",  address: "0xbD84f09dEF066606a208298711887010C8f62D7D", decimals: 18 },
-    FEUSD: { symbol: "feUSD", address: "0x83B367B6667958564F79F88172960683050C3005", decimals: 18 }
+    USDT0: { symbol: "USDT0", address: "0xB8CE59FC3717ada4C02eaDF9682A9e934F625ebb", decimals: 6, isNative: false },
+    USDH:  { symbol: "USDH",  address: "0x111111a1a0667d36bd57c0a9f569b98057111111", decimals: 6, isNative: false },
+    HYPE:  { symbol: "HYPE",  address: "0x0d01dc56dcaaca66ad901c959b4011ec", decimals: 18, isNative: false }, 
+    PURR:  { symbol: "PURR",  address: "0xC0021B0e504620025F17A9446D3283624E772297", decimals: 8, isNative: false },
+    UBTC:  { symbol: "uBTC",  address: "0x059a45653655181741F8c01d4a046294D256191E", decimals: 8, isNative: false },
+    UETH:  { symbol: "uETH",  address: "0xbD84f09dEF066606a208298711887010C8f62D7D", decimals: 18, isNative: false },
+    FEUSD: { symbol: "feUSD", address: "0x83B367B6667958564F79F88172960683050C3005", decimals: 18, isNative: false }
 };
 
 const ROUTER_ADDRESS = "0x1EbDFC75FfE3ba3de61E7138a3E8706aC841Af9B";
@@ -28,8 +29,8 @@ const RPC_URL = "https://rpc.hyperliquid.xyz/evm";
 const PAIRS = [
     { name: "USDT0 to USDH",  from: TOKENS.USDT0, to: TOKENS.USDH,  fee: 100  },
     { name: "USDH to USDT0",  from: TOKENS.USDH,  to: TOKENS.USDT0, fee: 100  },
-    { name: "USDT0 to HYPE",  from: TOKENS.USDT0, to: TOKENS.HYPE,  fee: 3000 },
-    { name: "HYPE to USDT0",  from: TOKENS.HYPE,  to: TOKENS.USDT0, fee: 3000 },
+    { name: "USDT0 to HYPE",  from: TOKENS.USDT0, to: TOKENS.HYPE,  fee: 500  }, // Gunakan fee 500
+    { name: "HYPE to USDT0",  from: TOKENS.HYPE,  to: TOKENS.USDT0, fee: 500  }, // Gunakan fee 500
     { name: "USDT0 to PURR",  from: TOKENS.USDT0, to: TOKENS.PURR,  fee: 3000 },
     { name: "PURR to USDT0",  from: TOKENS.PURR,  to: TOKENS.USDT0, fee: 3000 },
     { name: "USDT0 to uBTC",  from: TOKENS.USDT0, to: TOKENS.UBTC,  fee: 500  },
@@ -52,7 +53,7 @@ const ROUTER_ABI = [
 ];
 
 async function runSwap(pair, amount, iteration) {
-    console.log(`\n--- Transaksi #${iteration} ---`);
+    console.log(`\n--- Transaksi #${iteration} (${pair.name}) ---`);
     
     try {
         const provider = new ethers.JsonRpcProvider(RPC_URL);
@@ -63,25 +64,18 @@ async function runSwap(pair, amount, iteration) {
         const amountInWei = ethers.parseUnits(amount.toString(), pair.from.decimals);
         
         // 1. Cek Saldo & Allowance
-        if (!pair.from.isNative) {
-            const tokenInContract = new ethers.Contract(pair.from.address, ERC20_ABI, signer);
-            const balance = await tokenInContract.balanceOf(walletAddress);
-            
-            console.log(`  📊 Saldo ${pair.from.symbol}: ${ethers.formatUnits(balance, pair.from.decimals)}`);
-            
-            if (balance < amountInWei) throw new Error(`Saldo ${pair.from.symbol} tidak cukup!`);
+        const tokenInContract = new ethers.Contract(pair.from.address, ERC20_ABI, signer);
+        const balance = await tokenInContract.balanceOf(walletAddress);
+        console.log(`  📊 Saldo ${pair.from.symbol}: ${ethers.formatUnits(balance, pair.from.decimals)}`);
+        
+        if (balance < amountInWei) throw new Error(`Saldo ${pair.from.symbol} tidak mencukupi!`);
 
-            const allowance = await tokenInContract.allowance(walletAddress, ROUTER_ADDRESS);
-            if (allowance < amountInWei) {
-                console.log(`  📝 Memproses Approval...`);
-                const txApprove = await tokenInContract.approve(ROUTER_ADDRESS, ethers.MaxUint256);
-                await txApprove.wait();
-                console.log("  ✅ Approved.");
-            }
-        } else {
-            const balanceNative = await provider.getBalance(walletAddress);
-            console.log(`  📊 Saldo HYPE: ${ethers.formatEther(balanceNative)}`);
-            if (balanceNative < amountInWei) throw new Error("Saldo HYPE tidak cukup!");
+        const allowance = await tokenInContract.allowance(walletAddress, ROUTER_ADDRESS);
+        if (allowance < amountInWei) {
+            console.log(`  📝 Memproses Approval...`);
+            const txApprove = await tokenInContract.approve(ROUTER_ADDRESS, ethers.MaxUint256);
+            await txApprove.wait();
+            console.log("  ✅ Approval Berhasil.");
         }
 
         // 2. Params
@@ -99,8 +93,8 @@ async function runSwap(pair, amount, iteration) {
         // 3. Eksekusi
         console.log(`  🚀 Swap ${amount} ${pair.from.symbol} ke ${pair.to.symbol} (Fee: ${pair.fee})...`);
         
+        // Sekarang semua token dianggap ERC-20, jadi tidak perlu lagi 'value'
         const tx = await router.exactInputSingle(params, { 
-            value: pair.from.isNative ? amountInWei : 0,
             gasLimit: 400000 
         });
 
@@ -121,7 +115,7 @@ async function runSwap(pair, amount, iteration) {
 async function main() {
     console.clear();
     console.log("==========================================");
-    console.log("     🤖 SWAP BOT V5.4 (W/ USDH)           ");
+    console.log("     🤖 SWAP BOT V5.5 (WRAPPED HYPE FIX)  ");
     console.log("==========================================");
 
     if (!process.env.PRIVATE_KEY) return console.log("PRIVATE_KEY kosong!");
