@@ -1,6 +1,6 @@
 /**
  * ============================================================
- * PRJX & UNISWAP BOT - VERSION 4.0 (FIXED AMBIGUITY)
+ * PRJX & UNISWAP BOT - VERSION 5.0 (THE STABLE ONE)
  * ============================================================
  */
 
@@ -27,19 +27,18 @@ const CONTRACTS = {
     base: {
         in: "0xfde4C96c8593536E31F229EA8f37b2ADa2699bb2", // USDT
         out: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", // USDC
-        router: "0x2626664c2603336E57B271c5C0b26F421741e481",
-        fee: 100 // Pool USDT/USDC di Base biasanya 0.01%
+        router: "0x2626664c2603336E57B271c5C0b26F421741e481", // SwapRouter02
+        fee: 100 
     }
 };
 
 const ERC20_ABI = [
     "function approve(address spender, uint256 amount) external returns (bool)",
     "function allowance(address owner, address spender) external view returns (uint256)",
-    "function decimals() external view returns (uint8)",
-    "function balanceOf(address account) external view returns (uint256)"
+    "function decimals() external view returns (uint8)"
 ];
 
-// PENTING: Gunakan satu signature saja yang paling lengkap (8 parameter termasuk deadline)
+// Gunakan ABI paling standar untuk Uniswap V3 Router
 const ROUTER_ABI = [
     "function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 deadline, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) external payable returns (uint256 amountOut)"
 ];
@@ -59,14 +58,11 @@ async function runSwap(networkKey, iteration) {
         const tokenIn = new ethers.Contract(poolConfig.in, ERC20_ABI, signer);
         const router = new ethers.Contract(poolConfig.router, ROUTER_ABI, signer);
 
-        // Ambil desimal secara real-time dari kontrak
         const decimals = await tokenIn.decimals();
         const amountInWei = ethers.parseUnits(amountStr || "0.01", decimals);
-        
-        // Slippage 1%
-        const amountOutMinWei = (amountInWei * BigInt(99)) / BigInt(100);
+        const amountOutMinWei = (amountInWei * BigInt(98)) / BigInt(100); // Slippage 2% (Lebih aman)
 
-        // Approval Check
+        // 1. Approval Check
         const allowance = await tokenIn.allowance(walletAddress, poolConfig.router);
         if (allowance < amountInWei) {
             console.log("  📝 Memproses Approval...");
@@ -75,27 +71,26 @@ async function runSwap(networkKey, iteration) {
             console.log("  ✅ Approved.");
         }
 
-        const deadline = Math.floor(Date.now() / 1000) + 60 * 10;
-        
-        // Buat objek params sesuai signature ABI yang 8 parameter
+        // 2. Prepare Params
         const params = {
             tokenIn: poolConfig.in,
             tokenOut: poolConfig.out,
             fee: poolConfig.fee,
             recipient: walletAddress,
-            deadline: deadline,
+            deadline: Math.floor(Date.now() / 1000) + 60 * 20, // 20 Menit
             amountIn: amountInWei,
             amountOutMinimum: amountOutMinWei,
             sqrtPriceLimitX96: 0
         };
 
-        console.log(`  🚀 Swap: ${amountStr} In -> Min ${ethers.formatUnits(amountOutMinWei, decimals)} Out`);
+        console.log(`  🚀 Menjalankan Swap...`);
 
-        // Memanggil fungsi secara spesifik untuk menghindari "ambiguous"
-        const tx = await router["exactInputSingle((address,address,uint24,address,uint256,uint256,uint256,uint160))"](
-            [params.tokenIn, params.tokenOut, params.fee, params.recipient, params.deadline, params.amountIn, params.amountOutMinimum, params.sqrtPriceLimitX96],
-            { gasLimit: 400000 }
-        );
+        // 3. Eksekusi dengan Gas Limit Manual & Penanganan Encoding
+        // Kita gunakan .getFunction untuk memastikan kita memanggil fungsi yang benar
+        const swapFunc = router.getFunction("exactInputSingle");
+        const tx = await swapFunc(params, {
+            gasLimit: 300000 
+        });
 
         console.log(`  ⏳ Hash: ${tx.hash}`);
         const receipt = await tx.wait();
@@ -103,28 +98,31 @@ async function runSwap(networkKey, iteration) {
         if (receipt.status === 1) {
             console.log("  ✅ BERHASIL!");
         } else {
-            console.log("  ❌ GAGAL (Transaction Reverted)");
+            console.log("  ❌ GAGAL: Transaksi Reverted.");
         }
 
     } catch (err) {
         console.log(`  ❌ Error: ${err.reason || err.message}`);
+        if (err.message.includes("insufficient funds")) {
+            console.log("     Pesan: Saldo ETH/HYPE Anda tidak cukup untuk gas fee.");
+        }
     }
 }
 
 async function main() {
     console.clear();
     console.log("==========================================");
-    console.log("    🤖 BOT SWAP MULTI-CHAIN V4.0          ");
+    console.log("    🤖 BOT SWAP MULTI-CHAIN V5.0          ");
     console.log("==========================================");
 
-    if (!process.env.PRIVATE_KEY) return console.log("PRIVATE_KEY tidak ada di .env");
+    if (!process.env.PRIVATE_KEY) return console.log("PRIVATE_KEY tidak ditemukan!");
 
     console.log("1. HyperEVM (USDT0 -> USDH)");
     console.log("2. Base (USDT -> USDC)");
     console.log("3. Jalankan Keduanya");
     
-    const choice = await question("\nPilih (1-3): ");
-    const count = parseInt(await question("Berapa kali loop? ")) || 1;
+    const choice = await question("\nPilih Jaringan (1-3): ");
+    const count = parseInt(await question("Berapa kali transaksi? ")) || 1;
     const delay = parseInt(await question("Jeda antar transaksi (detik)? ")) || 5;
 
     for (let i = 1; i <= count; i++) {
