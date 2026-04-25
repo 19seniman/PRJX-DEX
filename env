@@ -1,0 +1,18 @@
+# ============================================================
+#  .env - Konfigurasi Swap Bot
+#  JANGAN commit file ini ke GitHub!
+# ============================================================
+
+# Private key wallet kamu (dengan prefix 0x)
+# GUNAKAN WALLET BURNER/TEST SAJA - jangan wallet utama!
+PRIVATE_KEY=0xYOUR_PRIVATE_KEY_HERE
+
+# Jumlah USDT0 yang akan di-swap ke USDH (di HyperEVM)
+AMOUNT_USDT0=10
+
+# Jumlah USDT yang akan di-swap ke USDC (di Base)
+AMOUNT_USDT_BASE=10
+
+# Slippage dalam basis poin (50 = 0.5%, 100 = 1%)
+# Untuk stablecoin, 50 sudah cukup aman
+SLIPPAGE_BPS=50
