@@ -1,6 +1,6 @@
 /**
  * ============================================================
- * PRJX & UNISWAP BOT - VERSION 5.3 (DEBUG & FIX)
+ * PRJX & UNISWAP BOT - VERSION 5.4 (UPDATED WITH USDT0-USDH)
  * ============================================================
  */
 
@@ -26,16 +26,17 @@ const ROUTER_ADDRESS = "0x1EbDFC75FfE3ba3de61E7138a3E8706aC841Af9B";
 const RPC_URL = "https://rpc.hyperliquid.xyz/evm";
 
 const PAIRS = [
+    { name: "USDT0 to USDH",  from: TOKENS.USDT0, to: TOKENS.USDH,  fee: 100  },
+    { name: "USDH to USDT0",  from: TOKENS.USDH,  to: TOKENS.USDT0, fee: 100  },
     { name: "USDT0 to HYPE",  from: TOKENS.USDT0, to: TOKENS.HYPE,  fee: 3000 },
-    { name: "USDH to USDT0",  from: TOKENS.USDH,  to: TOKENS.USDT0, fee: 100  }, // Stable biasanya 100
+    { name: "HYPE to USDT0",  from: TOKENS.HYPE,  to: TOKENS.USDT0, fee: 3000 },
     { name: "USDT0 to PURR",  from: TOKENS.USDT0, to: TOKENS.PURR,  fee: 3000 },
     { name: "PURR to USDT0",  from: TOKENS.PURR,  to: TOKENS.USDT0, fee: 3000 },
-    { name: "HYPE to USDT0",  from: TOKENS.HYPE,  to: TOKENS.USDT0, fee: 3000 },
     { name: "USDT0 to uBTC",  from: TOKENS.USDT0, to: TOKENS.UBTC,  fee: 500  },
     { name: "uBTC to USDT0",  from: TOKENS.UBTC,  to: TOKENS.USDT0, fee: 500  },
     { name: "USDT0 to uETH",  from: TOKENS.USDT0, to: TOKENS.UETH,  fee: 500  },
     { name: "uETH to USDT0",  from: TOKENS.UETH,  to: TOKENS.USDT0, fee: 500  },
-    { name: "USDT0 to feUSD", from: TOKENS.USDT0, to: TOKENS.FEUSD, fee: 100  }, // COBA FEE 100 (0.01%)
+    { name: "USDT0 to feUSD", from: TOKENS.USDT0, to: TOKENS.FEUSD, fee: 100  },
     { name: "feUSD to USDT0", from: TOKENS.FEUSD, to: TOKENS.USDT0, fee: 100  }
 ];
 
@@ -59,18 +60,16 @@ async function runSwap(pair, amount, iteration) {
         const walletAddress = await signer.getAddress();
         const router = new ethers.Contract(ROUTER_ADDRESS, ROUTER_ABI, signer);
 
-        // 1. Cek Saldo & Allowance
         const amountInWei = ethers.parseUnits(amount.toString(), pair.from.decimals);
         
+        // 1. Cek Saldo & Allowance
         if (!pair.from.isNative) {
             const tokenInContract = new ethers.Contract(pair.from.address, ERC20_ABI, signer);
             const balance = await tokenInContract.balanceOf(walletAddress);
             
             console.log(`  📊 Saldo ${pair.from.symbol}: ${ethers.formatUnits(balance, pair.from.decimals)}`);
             
-            if (balance < amountInWei) {
-                throw new Error(`Saldo ${pair.from.symbol} tidak cukup!`);
-            }
+            if (balance < amountInWei) throw new Error(`Saldo ${pair.from.symbol} tidak cukup!`);
 
             const allowance = await tokenInContract.allowance(walletAddress, ROUTER_ADDRESS);
             if (allowance < amountInWei) {
@@ -91,7 +90,7 @@ async function runSwap(pair, amount, iteration) {
             tokenOut: pair.to.address,
             fee: pair.fee,
             recipient: walletAddress,
-            deadline: Math.floor(Date.now() / 1000) + 300, // 5 menit saja agar lebih ketat
+            deadline: Math.floor(Date.now() / 1000) + 300,
             amountIn: amountInWei,
             amountOutMinimum: 0,
             sqrtPriceLimitX96: 0
@@ -102,7 +101,7 @@ async function runSwap(pair, amount, iteration) {
         
         const tx = await router.exactInputSingle(params, { 
             value: pair.from.isNative ? amountInWei : 0,
-            gasLimit: 400000 // Ditambah sedikit untuk keamanan
+            gasLimit: 400000 
         });
 
         console.log(`  ⏳ Hash: ${tx.hash}`);
@@ -115,20 +114,22 @@ async function runSwap(pair, amount, iteration) {
         }
 
     } catch (err) {
-        console.log(`  ❌ Error Detail: ${err.message}`);
+        console.log(`  ❌ Error: ${err.message}`);
     }
 }
 
 async function main() {
     console.clear();
     console.log("==========================================");
-    console.log("     🤖 DEBUGGER SWAP BOT V5.3            ");
+    console.log("     🤖 SWAP BOT V5.4 (W/ USDH)           ");
     console.log("==========================================");
 
     if (!process.env.PRIVATE_KEY) return console.log("PRIVATE_KEY kosong!");
 
     PAIRS.forEach((p, i) => console.log(`${i + 1}. ${p.name}`));
     const choice = parseInt(await question("\nPilih nomor: ")) - 1;
+    if (isNaN(choice) || !PAIRS[choice]) return console.log("Pilihan salah.");
+
     const amount = await question(`Jumlah input: `);
     const count = parseInt(await question("Berapa kali? ")) || 1;
 
