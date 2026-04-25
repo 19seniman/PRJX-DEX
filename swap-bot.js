@@ -1,9 +1,3 @@
-/**
- * ============================================================
- * PRJX & UNISWAP BOT - VERSION 7.0 (STABLE & CLEAN)
- * ============================================================
- */
-
 require("dotenv").config();
 const { ethers } = require("ethers");
 const readline = require("readline");
@@ -88,8 +82,15 @@ async function runSwap(pair, amount) {
 
         console.log(`  🚀 Swap ${amount} ${pair.from.symbol} ...`);
         const tx = await router.exactInputSingle(params, { gasLimit: 400000 });
+        
+        console.log(`  ⏳ Menunggu konfirmasi...`);
         await tx.wait();
+        
         console.log("  ✅ BERHASIL!");
+        // --- FITUR EXPLORER ---
+        console.log(`  🔗 Cek Transaksi: https://www.hyperscan.xyz/tx/${tx.hash}`);
+        console.log(`  🔗 Cek Address: https://www.hyperscan.xyz/address/${walletAddress}`);
+        
     } catch (err) {
         console.log(`  ❌ Error: ${err.message}`);
     }
@@ -98,7 +99,7 @@ async function runSwap(pair, amount) {
 async function main() {
     console.clear();
     console.log("==========================================");
-    console.log("     🤖 SWAP BOT V7.0 (STABLE)            ");
+    console.log("     🤖 HyperEVM  ~ 19Seniman   ");
     console.log("==========================================");
 
     if (!process.env.PRIVATE_KEY) {
