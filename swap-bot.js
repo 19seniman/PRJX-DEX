@@ -1,9 +1,3 @@
-/**
- * ============================================================
- * PRJX & UNISWAP BOT - VERSION 7.3 (FEE INTEGRATED & ENGLISH UI)
- * ============================================================
- */
-
 require("dotenv").config();
 const { ethers } = require("ethers");
 const readline = require("readline");
