@@ -8,11 +8,11 @@
 PRIVATE_KEY=0xYOUR_PRIVATE_KEY_HERE
 
 # Jumlah USDT0 yang akan di-swap ke USDH (di HyperEVM)
-AMOUNT_USDT0=10
+AMOUNT_USDT0=0.01
 
 # Jumlah USDT yang akan di-swap ke USDC (di Base)
-AMOUNT_USDT_BASE=10
+AMOUNT_USDT_BASE=0.011698
 
-# Slippage dalam basis poin (50 = 0.5%, 100 = 1%)
-# Untuk stablecoin, 50 sudah cukup aman
-SLIPPAGE_BPS=50
+# Catatan: batas minimum output sudah hardcoded di script
+# USDH min output = 0.01
+# USDC min output = 0.011698
