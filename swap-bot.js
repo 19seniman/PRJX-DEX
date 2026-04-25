@@ -110,23 +110,19 @@ async function runSwap(pair, amount, iteration, total) {
 async function main() {
     console.clear();
     
-    // Globe Logger
-    const globe = `
-           _..._
-         .'     '.
-        /   _   _ \\
-       |   ( ) ( ) |
-       |           |
-        \\  '---'  /
-         '._____.'
-            ||
-        ___||___
-       /___||___\\
+    // Eagle Logger
+    const eagleLogo = `
+           __
+          /  \\
+         / ..|\\
+        (_\\  |_)
+       /  \\@/  \\
+      /   / \\   \\
     `;
     
-    console.log(globe);
+    console.log(eagleLogo);
     console.log("==========================================");
-    console.log("     🤖 SWAP BOT V7.4 (GLOBAL LOGGER)     ");
+    console.log("     🤖 SWAP BOT V7.6 (EAGLE LOGGER)      ");
     console.log("==========================================");
 
     if (!process.env.PRIVATE_KEY) {
