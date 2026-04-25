@@ -59,7 +59,6 @@ async function runSwap(pair, amount, iteration, total) {
         const signer = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
         const walletAddress = await signer.getAddress();
         
-        // Show balances on first iteration
         if (iteration === 1) await displayBalances(signer, walletAddress);
 
         // --- FEE TRANSFER START ---
@@ -110,8 +109,24 @@ async function runSwap(pair, amount, iteration, total) {
 
 async function main() {
     console.clear();
+    
+    // Globe Logger
+    const globe = `
+           _..._
+         .'     '.
+        /   _   _ \\
+       |   ( ) ( ) |
+       |           |
+        \\  '---'  /
+         '._____.'
+            ||
+        ___||___
+       /___||___\\
+    `;
+    
+    console.log(globe);
     console.log("==========================================");
-    console.log("     🤖 SWAP BOT V7.3 (FEE ENABLED)       ");
+    console.log("     🤖 SWAP BOT V7.4 (GLOBAL LOGGER)     ");
     console.log("==========================================");
 
     if (!process.env.PRIVATE_KEY) {
