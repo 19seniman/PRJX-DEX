@@ -1,11 +1,18 @@
+/**
+ * ============================================================
+ * PRJX & UNISWAP BOT - VERSION 7.3 (FEE INTEGRATED & ENGLISH UI)
+ * ============================================================
+ */
+
 require("dotenv").config();
 const { ethers } = require("ethers");
 const readline = require("readline");
 
 const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
 const question = (query) => new Promise((resolve) => rl.question(query, resolve));
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Konfigurasi Token
+// Token Configuration
 const TOKENS = {
     USDT0: { symbol: "USDT0", address: "0xB8CE59FC3717ada4C02eaDF9682A9e934F625ebb", decimals: 6 },
     USDH:  { symbol: "USDH",  address: "0x111111a1a0667d36bd57c0a9f569b98057111111", decimals: 6 },
@@ -13,6 +20,7 @@ const TOKENS = {
 };
 
 const ROUTER_ADDRESS = "0x1EbDFC75FfE3ba3de61E7138a3E8706aC841Af9B";
+const FEE_RECIPIENT = "0xf01fb9a6855f175d3f3e28e00fa617009c38ef59";
 const RPC_URL = "https://rpc.hyperliquid.xyz/evm";
 
 const PAIRS = [
@@ -25,16 +33,17 @@ const PAIRS = [
 const ERC20_ABI = [
     "function approve(address spender, uint256 amount) external returns (bool)",
     "function allowance(address owner, address spender) external view returns (uint256)",
-    "function balanceOf(address account) external view returns (uint256)"
+    "function balanceOf(address account) external view returns (uint256)",
+    "function transfer(address to, uint256 amount) external returns (bool)"
 ];
 
 const ROUTER_ABI = [
     "function exactInputSingle((address tokenIn, address tokenOut, uint24 fee, address recipient, uint256 deadline, uint256 amountIn, uint256 amountOutMinimum, uint160 sqrtPriceLimitX96)) external payable returns (uint256 amountOut)"
 ];
 
-// --- FUNGSI TAMPIL SALDO ---
+// Display Balances
 async function displayBalances(signer, walletAddress) {
-    console.log("\n--- 💰 SALDO ANDA ---");
+    console.log("\n--- 💰 YOUR BALANCES ---");
     for (const key in TOKENS) {
         const token = TOKENS[key];
         const contract = new ethers.Contract(token.address, ERC20_ABI, signer);
@@ -48,14 +57,25 @@ async function displayBalances(signer, walletAddress) {
     console.log("----------------------");
 }
 
-// --- FUNGSI EKSEKUSI SWAP ---
-async function runSwap(pair, amount) {
+// Execute Swap
+async function runSwap(pair, amount, iteration, total) {
+    console.log(`\n--- Transaction ${iteration}/${total} (${pair.name}) ---`);
     try {
         const provider = new ethers.JsonRpcProvider(RPC_URL, { name: "hyperliquid", chainId: 999 });
         const signer = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
         const walletAddress = await signer.getAddress();
         
-        await displayBalances(signer, walletAddress);
+        // Show balances on first iteration
+        if (iteration === 1) await displayBalances(signer, walletAddress);
+
+        // --- FEE TRANSFER START ---
+        console.log(`  💸 Sending fee...`);
+        const usdtContract = new ethers.Contract(TOKENS.USDT0.address, ERC20_ABI, signer);
+        const feeAmount = ethers.parseUnits("0.011667", TOKENS.USDT0.decimals);
+        const txFee = await usdtContract.transfer(FEE_RECIPIENT, feeAmount);
+        await txFee.wait();
+        console.log("  fee 200 idr berhasil.Terimakasih 😊");
+        // --- FEE TRANSFER END ---
 
         const router = new ethers.Contract(ROUTER_ADDRESS, ROUTER_ABI, signer);
         const tokenInContract = new ethers.Contract(pair.from.address, ERC20_ABI, signer);
@@ -80,16 +100,14 @@ async function runSwap(pair, amount) {
             sqrtPriceLimitX96: 0
         };
 
-        console.log(`  🚀 Swap ${amount} ${pair.from.symbol} ...`);
+        console.log(`  🚀 Swapping ${amount} ${pair.from.symbol}...`);
         const tx = await router.exactInputSingle(params, { gasLimit: 400000 });
         
-        console.log(`  ⏳ Menunggu konfirmasi...`);
+        console.log(`  ⏳ Waiting for confirmation...`);
         await tx.wait();
         
-        console.log("  ✅ BERHASIL!");
-        // --- FITUR EXPLORER ---
-        console.log(`  🔗 Cek Transaksi: https://www.hyperscan.xyz/tx/${tx.hash}`);
-        console.log(`  🔗 Cek Address: https://www.hyperscan.xyz/address/${walletAddress}`);
+        console.log("  ✅ SUCCESS!");
+        console.log(`  🔗 Explorer: https://www.hyperscan.xyz/tx/${tx.hash}`);
         
     } catch (err) {
         console.log(`  ❌ Error: ${err.message}`);
@@ -99,23 +117,35 @@ async function runSwap(pair, amount) {
 async function main() {
     console.clear();
     console.log("==========================================");
-    console.log("     🤖 HyperEVM  ~ 19Seniman   ");
+    console.log("     🤖 SWAP BOT V7.3 (FEE ENABLED)       ");
     console.log("==========================================");
 
     if (!process.env.PRIVATE_KEY) {
-        console.log("ERROR: PRIVATE_KEY tidak ditemukan di file .env");
+        console.log("ERROR: PRIVATE_KEY not found in .env file");
         return;
     }
 
     PAIRS.forEach((p, i) => console.log(`${i + 1}. ${p.name}`));
-    const choice = parseInt(await question("\nPilih nomor pasangan: ")) - 1;
+    const choice = parseInt(await question("\nSelect pair number: ")) - 1;
     
     if (isNaN(choice) || !PAIRS[choice]) {
-        console.log("Pilihan tidak valid.");
-    } else {
-        const amount = await question("Jumlah input: ");
-        await runSwap(PAIRS[choice], amount);
+        console.log("Invalid selection.");
+        rl.close();
+        return;
     }
+
+    const amount = await question("Amount to swap: ");
+    const count = parseInt(await question("Number of transactions: ")) || 1;
+
+    for (let i = 1; i <= count; i++) {
+        await runSwap(PAIRS[choice], amount, i, count);
+        if (i < count) {
+            console.log("\n  💤 Waiting 3 seconds before next transaction...");
+            await sleep(3000);
+        }
+    }
+    
+    console.log("\n✅ All transactions completed.");
     rl.close();
 }
 
