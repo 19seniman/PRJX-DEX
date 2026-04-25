@@ -122,7 +122,7 @@ async function main() {
     
     console.log(eagleLogo);
     console.log("==========================================");
-    console.log("     🤖 SWAP BOT V7.6 (EAGLE LOGGER)      ");
+    console.log("     🤖 PRJX DEX ~ 19SENIMAN      ");
     console.log("==========================================");
 
     if (!process.env.PRIVATE_KEY) {
