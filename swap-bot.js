@@ -1,6 +1,6 @@
 /**
  * ============================================================
- * PRJX & UNISWAP BOT - VERSION 5.7 (NATIVE & ERC20 SUPPORT)
+ * PRJX & UNISWAP BOT - VERSION 6.0 (FINALIZED)
  * ============================================================
  */
 
@@ -12,28 +12,28 @@ const rl = readline.createInterface({ input: process.stdin, output: process.stdo
 const question = (query) => new Promise((resolve) => rl.question(query, resolve));
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
-// Alamat Native HYPE menggunakan 0x000...000
-const NATIVE_TOKEN = "0x0000000000000000000000000000000000000000";
-
+// Konfigurasi Token
 const TOKENS = {
     USDT0: { symbol: "USDT0", address: "0xB8CE59FC3717ada4C02eaDF9682A9e934F625ebb", decimals: 6 },
-    HYPE:  { symbol: "HYPE",  address: NATIVE_TOKEN, decimals: 18 }, // Alamat 0x0...0
-    USDH:  { symbol: "USDH",  address: "0x111111a1a0667d36bd57c0a9f569b98057111111", decimals: 6 }
+    USDH:  { symbol: "USDH",  address: "0x111111a1a0667d36bd57c0a9f569b98057111111", decimals: 6 },
+    WHYPE: { symbol: "WHYPE", address: "0x5555555555555555555555555555555555555555", decimals: 18 }
 };
 
 const ROUTER_ADDRESS = "0x1EbDFC75FfE3ba3de61E7138a3E8706aC841Af9B";
 const RPC_URL = "https://rpc.hyperliquid.xyz/evm";
 
+// Daftar Pasangan Swap
 const PAIRS = [
-    { name: "USDT0 to HYPE (Native)", from: TOKENS.USDT0, to: TOKENS.HYPE, fee: 500 },
-    { name: "HYPE (Native) to USDT0", from: TOKENS.HYPE, to: TOKENS.USDT0, fee: 500 }
+    { name: "USDT0 to USDH",  from: TOKENS.USDT0, to: TOKENS.USDH,  fee: 100  },
+    { name: "USDH to USDT0",  from: TOKENS.USDH,  to: TOKENS.USDT0, fee: 100  },
+    { name: "USDT0 to WHYPE", from: TOKENS.USDT0, to: TOKENS.WHYPE, fee: 500  },
+    { name: "WHYPE to USDT0", from: TOKENS.WHYPE, to: TOKENS.USDT0, fee: 500  }
 ];
 
 const ERC20_ABI = [
     "function approve(address spender, uint256 amount) external returns (bool)",
     "function allowance(address owner, address spender) external view returns (uint256)",
-    "function balanceOf(address account) external view returns (uint256)",
-    "function decimals() external view returns (uint8)"
+    "function balanceOf(address account) external view returns (uint256)"
 ];
 
 const ROUTER_ABI = [
@@ -44,7 +44,7 @@ async function runSwap(pair, amount, iteration) {
     console.log(`\n--- Transaksi #${iteration} (${pair.name}) ---`);
     
     try {
-        // Mendefinisikan network agar tidak error ENS
+        // Konfigurasi Provider (Fix untuk ENS Error)
         const provider = new ethers.JsonRpcProvider(RPC_URL, { name: "hyperliquid", chainId: 999 });
         const signer = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
         const walletAddress = await signer.getAddress();
@@ -52,24 +52,22 @@ async function runSwap(pair, amount, iteration) {
 
         const amountInWei = ethers.parseUnits(amount.toString(), pair.from.decimals);
         
-        // JIKA BUKAN NATIVE (ERC20), Lakukan Approval
-        if (pair.from.address !== NATIVE_TOKEN) {
-            const tokenInContract = new ethers.Contract(pair.from.address, ERC20_ABI, signer);
-            const balance = await tokenInContract.balanceOf(walletAddress);
-            console.log(`  📊 Saldo ${pair.from.symbol}: ${ethers.formatUnits(balance, pair.from.decimals)}`);
-            
-            if (balance < amountInWei) throw new Error(`Saldo ${pair.from.symbol} tidak cukup!`);
+        // 1. Cek Saldo & Approval
+        const tokenInContract = new ethers.Contract(pair.from.address, ERC20_ABI, signer);
+        const balance = await tokenInContract.balanceOf(walletAddress);
+        
+        console.log(`  📊 Saldo ${pair.from.symbol}: ${ethers.formatUnits(balance, pair.from.decimals)}`);
+        if (balance < amountInWei) throw new Error(`Saldo ${pair.from.symbol} tidak cukup!`);
 
-            const allowance = await tokenInContract.allowance(walletAddress, ROUTER_ADDRESS);
-            if (allowance < amountInWei) {
-                console.log(`  📝 Approving ${pair.from.symbol}...`);
-                const txApprove = await tokenInContract.approve(ROUTER_ADDRESS, ethers.MaxUint256);
-                await txApprove.wait();
-                console.log("  ✅ Approved.");
-            }
+        const allowance = await tokenInContract.allowance(walletAddress, ROUTER_ADDRESS);
+        if (allowance < amountInWei) {
+            console.log(`  📝 Approving ${pair.from.symbol}...`);
+            const txApprove = await tokenInContract.approve(ROUTER_ADDRESS, ethers.MaxUint256);
+            await txApprove.wait();
+            console.log("  ✅ Approved.");
         }
 
-        // Params Swap
+        // 2. Eksekusi Swap
         const params = {
             tokenIn: pair.from.address,
             tokenOut: pair.to.address,
@@ -82,15 +80,8 @@ async function runSwap(pair, amount, iteration) {
         };
 
         console.log(`  🚀 Swap ${amount} ${pair.from.symbol} ...`);
+        const tx = await router.exactInputSingle(params, { gasLimit: 400000 });
         
-        // JIKA NATIVE, gunakan 'value' pada transaksi
-        const txOptions = { 
-            gasLimit: 400000,
-            value: (pair.from.address === NATIVE_TOKEN) ? amountInWei : 0 
-        };
-
-        const tx = await router.exactInputSingle(params, txOptions);
-
         console.log(`  ⏳ Hash: ${tx.hash}`);
         const receipt = await tx.wait();
         
@@ -108,7 +99,7 @@ async function runSwap(pair, amount, iteration) {
 async function main() {
     console.clear();
     console.log("==========================================");
-    console.log("     🤖 SWAP BOT V5.7 (NATIVE SUPPORT)    ");
+    console.log("     🤖 SWAP BOT V6.0 (WHYPE SUPPORT)     ");
     console.log("==========================================");
 
     if (!process.env.PRIVATE_KEY) return console.log("PRIVATE_KEY kosong!");
