@@ -21,7 +21,9 @@ const PAIRS = [
     { name: "USDT0 to USDH",  from: TOKENS.USDT0, to: TOKENS.USDH,  fee: 100  },
     { name: "USDH to USDT0",  from: TOKENS.USDH,  to: TOKENS.USDT0, fee: 100  },
     { name: "USDT0 to WHYPE", from: TOKENS.USDT0, to: TOKENS.WHYPE, fee: 500  },
-    { name: "WHYPE to USDT0", from: TOKENS.WHYPE, to: TOKENS.USDT0, fee: 500  }
+    { name: "WHYPE to USDT0", from: TOKENS.WHYPE, to: TOKENS.USDT0, fee: 500  },
+    { name: "USDH to WHYPE",  from: TOKENS.USDH,  to: TOKENS.WHYPE, fee: 500  },
+    { name: "WHYPE to USDH",  from: TOKENS.WHYPE, to: TOKENS.USDH,  fee: 500  }
 ];
 
 const ERC20_ABI = [
@@ -103,7 +105,9 @@ async function runSwap(signer, walletAddress, pair, amount, iteration, total, fe
         console.log(`  🔗 Explorer: https://www.hyperscan.xyz/tx/${tx.hash}`);
         
     } catch (err) {
-        console.log(`  ❌ Error: ${err.message}`);
+        console.log(`\n  ❌ Transaksi gagal!`);
+        console.log(`  ⚠️  Pastikan saldo $USDT0 anda cukup, sediakan setidaknya`);
+        console.log(`      0.04 $USDT0 agar transaksi bisa berjalan lancar.`);
     }
 }
 
